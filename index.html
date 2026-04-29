@@ -986,7 +986,7 @@ var lastCurrentIndex = -1;
 var lastVolume = -1;
 var lastPlaylist = null;
 setInterval(function() {
-  fetch('/playlist.json?t=' + Date.now(), { cache: 'no-cache' })
+  fetch('playlist.json?t=' + Date.now(), { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.playlist || !data.version) return;
@@ -1065,7 +1065,7 @@ setInterval(function() {
 // Commands: {"cmd":"vol","v":0.5}  {"cmd":"next"}  {"cmd":"prev"}  {"cmd":"pause"}  {"cmd":"play"}
 (function() {
   var polling = setInterval(function() {
-    fetch('/playlist.json?t=' + Date.now(), { cache: 'no-cache' })
+    fetch('playlist.json?t=' + Date.now(), { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (!data.cmd) return;
