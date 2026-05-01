@@ -784,6 +784,58 @@ var currentIndex = -1;
 var isPlaying = false;
 var lastVersion = null;
 var lastCurrentIndex = -1;
+var wakeLock = null;
+
+// ===== Wake Lock API — keeps browser tab alive on Android =====
+async function requestWakeLock() {
+  try {
+    if (!('wakeLock' in navigator)) return;
+    wakeLock = await navigator.wakeLock.request('screen');
+    console.log('Wake lock active');
+    wakeLock.addEventListener('release', () => {
+      console.log('Wake lock released');
+      wakeLock = null;
+    });
+  } catch (err) {
+    console.warn('Wake lock failed:', err.message);
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    await wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+
+// Re-acquire wake lock when page becomes visible
+if (document.addEventListener) {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && isPlaying) {
+      await requestWakeLock();
+    }
+  });
+}
+
+// ===== Media Session API — OS-level media controls =====
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('play', function() { isPlaying && audio.play(); });
+  navigator.mediaSession.setActionHandler('pause', function() { audio.pause(); isPlaying = false; playBtn.textContent = '▶'; playBtn.classList.remove('playing'); setStatus('Paused', ''); });
+  navigator.mediaSession.setActionHandler('previoustrack', function() { if (playlist.length > 0) { currentIndex = (currentIndex - 1 + playlist.length) % playlist.length; audio.currentTime = 0; playTrack(); } });
+  navigator.mediaSession.setActionHandler('nexttrack', function() { if (playlist.length > 0) { currentIndex = (currentIndex + 1) % playlist.length; audio.currentTime = 0; playTrack(); } });
+}
+
+function updateMediaSession() {
+  if (!('mediaSession' in navigator) || currentIndex < 0 || currentIndex >= playlist.length) return;
+  var item = playlist[currentIndex];
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: item.title || 'Track ' + (currentIndex + 1),
+    artist: item.artist || 'Mariobot',
+    album: 'Mariobot Music Player',
+    artwork: [{ src: 'assets/mario/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'assets/mario/icon-512.png', sizes: '512x512', type: 'image/png' }]
+  });
+  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+}
 
 // PWA Install functionality
 var deferredPrompt = null;
@@ -922,6 +974,8 @@ function playTrack() {
     setStatus('▶ Playing: ' + item.title, true);
     updateNowPlaying();
     renderPlaylist();
+    updateMediaSession();
+    requestWakeLock();
   }).catch(function(e) {
     setStatus('Playback error: ' + e.message, '');
   });
@@ -1049,12 +1103,17 @@ setInterval(function() {
         if (data.playing && !isPlaying && !isNew) {
           playTrack();
         }
+        // Re-acquire wake lock if we're playing but wake lock is gone
+        if (data.playing && isPlaying && !wakeLock) {
+          requestWakeLock();
+        }
         if (!data.playing && isPlaying) {
           audio.pause();
           isPlaying = false;
           playBtn.textContent = '▶';
           playBtn.classList.remove('playing');
           setStatus('Paused', '');
+          releaseWakeLock();
         }
       }
     })
